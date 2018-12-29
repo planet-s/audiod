@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, VecDeque};
-use syscall::error::{EBADF, Error, Result};
+use syscall::error::{EBADF, EWOULDBLOCK, Error, Result};
+use syscall::flag::O_NONBLOCK;
 use syscall::scheme::SchemeBlockMut;
 
 // The strict buffer size of the hda: driver
@@ -59,10 +60,14 @@ impl SchemeBlockMut for AudioScheme {
     }
 
     fn write(&mut self, id: usize, buf: &[u8]) -> Result<Option<usize>> {
-        let mut handle = self.handles.get_mut(&id).ok_or(Error::new(EBADF))?;
+        let handle = self.handles.get_mut(&id).ok_or(Error::new(EBADF))?;
 
         if handle.buffer.len() >= HANDLE_BUFFER_SIZE {
-            Ok(None)
+            if handle.flags & O_NONBLOCK > 0 {
+                Err(Error::new(EWOULDBLOCK))
+            } else {
+                Ok(None)
+            }
         } else {
             let mut i = 0;
             while i + 4 <= buf.len() {
