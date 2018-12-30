@@ -10,7 +10,7 @@ const HANDLE_BUFFER_SIZE: usize = 4096;
 
 struct Handle {
     flags: usize,
-    buffer: VecDeque<(u16, u16)>,
+    buffer: VecDeque<(i16, i16)>,
 }
 
 pub struct AudioScheme {
@@ -26,15 +26,15 @@ impl AudioScheme {
         }
     }
 
-    pub fn buffer(&mut self) -> [(u16, u16); HDA_BUFFER_SIZE] {
-        let mut buffer = [(0, 0); HDA_BUFFER_SIZE];
+    pub fn buffer(&mut self) -> [(i16, i16); HDA_BUFFER_SIZE] {
+        let mut buffer = [(0i16, 0i16); HDA_BUFFER_SIZE];
 
         for (_id, handle) in self.handles.iter_mut() {
             let mut i = 0;
             while i < buffer.len() {
                 if let Some(sample) = handle.buffer.pop_front() {
-                    buffer[i].0 += sample.0;
-                    buffer[i].1 += sample.1;
+                    buffer[i].0 = buffer[i].0.saturating_add(sample.0);
+                    buffer[i].1 = buffer[i].1.saturating_add(sample.1);
                 } else {
                     break;
                 }
@@ -72,8 +72,8 @@ impl SchemeBlockMut for AudioScheme {
             let mut i = 0;
             while i + 4 <= buf.len() {
                 handle.buffer.push_back((
-                    (buf[i] as u16) | ((buf[i + 1] as u16) << 8),
-                    (buf[i + 2] as u16) | ((buf[i + 3] as u16) << 8)
+                    (buf[i] as i16) | ((buf[i + 1] as i16) << 8),
+                    (buf[i + 2] as i16) | ((buf[i + 3] as i16) << 8)
                 ));
 
                 i += 4;
