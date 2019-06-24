@@ -18,6 +18,9 @@ fn from_syscall_error(error: syscall::Error) -> io::Error {
 extern "C" fn sigusr_handler(_sig: usize) {}
 
 fn thread(scheme: Arc<Mutex<AudioScheme>>, pid: usize, mut hda_file: fs::File) -> io::Result<()> {
+    // Enter null namespace
+    syscall::setrens(0, 0).map_err(from_syscall_error)?;
+
     loop {
         let buffer = scheme.lock().unwrap().buffer();
         let buffer_u8 = unsafe {
@@ -52,14 +55,15 @@ fn daemon(pipe_fd: usize) -> io::Result<()> {
     syscall::write(pipe_fd, &[1]).map_err(from_syscall_error)?;
     let _ = syscall::close(pipe_fd);
 
-    // Enter the null namespace
-    syscall::setrens(0, 0).map_err(from_syscall_error)?;
-
     let scheme = Arc::new(Mutex::new(AudioScheme::new()));
 
     // Spawn a thread to mix and send audio data
     let scheme_thread = scheme.clone();
     let _thread = thread::spawn(move || thread(scheme_thread, pid, hda_file));
+
+    // Enter the null namespace - done after thread is created so
+    // memory: can be accessed for stack allocation
+    syscall::setrens(0, 0).map_err(from_syscall_error)?;
 
     let mut todo = Vec::new();
     loop {
